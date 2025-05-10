@@ -1,7 +1,8 @@
 import socket
 import threading
 import time
-from utils import BROADCAST_PORT, parse_json_message, is_user_discovered
+import json
+from utils import BROADCAST_PORT, is_user_discovered
 
 class PeerDiscovery:
     def __init__(self):
@@ -25,10 +26,10 @@ class PeerDiscovery:
         while self.running:
             try:
                 data, addr = self.socket.recvfrom(1024)
-                message = parse_json_message(data.decode())
+                message = json.loads(data.decode())
                 
                 if message and "username" in message:
-                    ip = addr[0]
+                    ip = addr[0]  # Get IP from the UDP packet
                     username = message["username"]
                     
                     if ip not in self.peers:

@@ -1,10 +1,11 @@
 import socket
 import threading
+import json
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 import hashlib
 from colorama import Fore, Style
-from utils import CHAT_PORT, parse_json_message, log_message, get_timestamp, create_json_message
+from utils import CHAT_PORT, log_message, get_timestamp
 
 class ChatResponder:
     def __init__(self):
@@ -29,7 +30,7 @@ class ChatResponder:
         """Handle an incoming connection."""
         try:
             data = conn.recv(1024).decode()
-            message = parse_json_message(data)
+            message = json.loads(data)
             
             if not message:
                 return
@@ -41,28 +42,40 @@ class ChatResponder:
                 private_key = 7  # Fixed private key for simplicity
                 public_key = pow(g, private_key, p)
                 
-                # Send our public key
-                conn.send(create_json_message("key", str(public_key)).encode())
+                # Send our public key in exact required format
+                conn.send(json.dumps({"key": str(public_key)}).encode())
                 
                 # Calculate shared secret
                 peer_public_key = int(message["key"])
                 shared_secret = pow(peer_public_key, private_key, p)
                 key = hashlib.sha256(str(shared_secret).encode()).digest()
                 
-                # Wait for encrypted message
-                data = conn.recv(1024).decode()
-                message = parse_json_message(data)
+                print(f"{Fore.GREEN}Secure connection established with {addr[0]}{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}Waiting for messages...{Style.RESET_ALL}")
                 
-                if "encryptedmessage" in message:
-                    # Decrypt message
-                    encrypted_data = bytes.fromhex(message["encryptedmessage"])
-                    iv = encrypted_data[:16]
-                    ct = encrypted_data[16:]
-                    cipher = AES.new(key, AES.MODE_CBC, iv)
-                    decrypted_message = unpad(cipher.decrypt(ct), AES.block_size).decode()
-                    print(f"\n{Fore.GREEN}Received encrypted message from {addr[0]}:{Style.RESET_ALL}")
-                    print(f"{Fore.CYAN}Message: {decrypted_message}{Style.RESET_ALL}")
-                    log_message(self.log_file, get_timestamp(), addr[0], decrypted_message, "RECEIVED")
+                # Keep TCP session open and handle multiple messages
+                while True:
+                    try:
+                        # Wait for encrypted message
+                        data = conn.recv(1024).decode()
+                        if not data:
+                            break
+                            
+                        message = json.loads(data)
+                        
+                        if "encryptedmessage" in message:
+                            # Decrypt message
+                            encrypted_data = bytes.fromhex(message["encryptedmessage"])
+                            iv = encrypted_data[:16]
+                            ct = encrypted_data[16:]
+                            cipher = AES.new(key, AES.MODE_CBC, iv)
+                            decrypted_message = unpad(cipher.decrypt(ct), AES.block_size).decode()
+                            print(f"\n{Fore.GREEN}Received encrypted message from {addr[0]}:{Style.RESET_ALL}")
+                            print(f"{Fore.CYAN}Message: {decrypted_message}{Style.RESET_ALL}")
+                            log_message(self.log_file, get_timestamp(), addr[0], decrypted_message, "RECEIVED")
+                    except Exception as e:
+                        print(f"{Fore.RED}Error receiving message: {e}{Style.RESET_ALL}")
+                        break
             
             elif "unencryptedmessage" in message:
                 print(f"\n{Fore.YELLOW}Received message from {addr[0]}:{Style.RESET_ALL}")

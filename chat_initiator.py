@@ -43,10 +43,10 @@ class ChatInitiator:
         secure = input().lower() == "yes"
         
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((target_ip, CHAT_PORT))
-                
-                if secure:
+            if secure:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((target_ip, CHAT_PORT))
+                    
                     print(f"\n{Fore.GREEN}Initiating secure chat session...{Style.RESET_ALL}")
                     # Implement Diffie-Hellman key exchange
                     p, g = 19, 2
@@ -54,36 +54,57 @@ class ChatInitiator:
                     private_key = int(input())
                     public_key = pow(g, private_key, p)
                     
-                    # Send public key
-                    s.send(create_json_message("key", str(public_key)).encode())
+                    # Send first number in exact required format
+                    s.send(json.dumps({"key": str(public_key)}).encode())
                     
                     # Receive peer's public key
                     data = s.recv(1024).decode()
-                    peer_public_key = int(parse_json_message(data)["key"])
+                    peer_public_key = int(json.loads(data)["key"])
                     
                     # Calculate shared secret
                     shared_secret = pow(peer_public_key, private_key, p)
                     key = hashlib.sha256(str(shared_secret).encode()).digest()
                     
-                    # Get message from user
                     print(f"\n{Fore.GREEN}Secure connection established!{Style.RESET_ALL}")
-                    print(f"{Fore.CYAN}Enter your message:{Style.RESET_ALL} ", end="")
+                    print(f"{Fore.CYAN}Type your message and press Enter to send.{Style.RESET_ALL}")
+                    print(f"{Fore.CYAN}Type 'exit' to end the chat session.{Style.RESET_ALL}")
+                    
+                    # Keep TCP session open and allow continuous message exchange
+                    while True:
+                        message = input()
+                        
+                        if message.lower() == 'exit':
+                            break
+                            
+                        # Encrypt and send message in exact required format
+                        cipher = AES.new(key, AES.MODE_CBC)
+                        ct_bytes = cipher.encrypt(pad(message.encode(), AES.block_size))
+                        encrypted_message = cipher.iv + ct_bytes
+                        s.send(json.dumps({"encryptedmessage": encrypted_message.hex()}).encode())
+                        
+                        # Log the sent message
+                        log_message(self.log_file, get_timestamp(), target_username, message, "SENT")
+                        print(f"{Fore.GREEN}Message sent successfully!{Style.RESET_ALL}")
+            else:
+                print(f"\n{Fore.YELLOW}Initiating unsecure chat session...{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}Type your message and press Enter to send.{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}Type 'exit' to end the chat session.{Style.RESET_ALL}")
+                
+                while True:
                     message = input()
                     
-                    # Encrypt and send message
-                    cipher = AES.new(key, AES.MODE_CBC)
-                    ct_bytes = cipher.encrypt(pad(message.encode(), AES.block_size))
-                    encrypted_message = cipher.iv + ct_bytes
-                    s.send(create_json_message("encrypted", encrypted_message.hex()).encode())
-                else:
-                    print(f"\n{Fore.YELLOW}Initiating unsecure chat session...{Style.RESET_ALL}")
-                    print(f"{Fore.CYAN}Enter your message:{Style.RESET_ALL} ", end="")
-                    message = input()
-                    s.send(create_json_message("unencrypted", message).encode())
-                
-                # Log the sent message
-                log_message(self.log_file, get_timestamp(), target_username, message, "SENT")
-                print(f"{Fore.GREEN}Message sent successfully!{Style.RESET_ALL}")
+                    if message.lower() == 'exit':
+                        break
+                    
+                    # Create new TCP connection for each message
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        try:
+                            s.connect((target_ip, CHAT_PORT))
+                            s.send(json.dumps({"unencryptedmessage": message}).encode())
+                            log_message(self.log_file, get_timestamp(), target_username, message, "SENT")
+                            print(f"{Fore.GREEN}Message sent successfully!{Style.RESET_ALL}")
+                        except Exception as e:
+                            print(f"{Fore.RED}Error sending message: {e}{Style.RESET_ALL}")
                 
         except Exception as e:
             print(f"{Fore.RED}Error initiating chat: {e}{Style.RESET_ALL}")

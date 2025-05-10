@@ -1,7 +1,8 @@
 import socket
 import time
 import threading
-from utils import BROADCAST_IP, BROADCAST_PORT, BROADCAST_INTERVAL, create_json_message
+import json
+from utils import BROADCAST_IP, BROADCAST_PORT, BROADCAST_INTERVAL
 
 class ServiceAnnouncer:
     def __init__(self):
@@ -27,7 +28,8 @@ class ServiceAnnouncer:
         """Continuously broadcast presence in the network."""
         while self.running:
             try:
-                message = create_json_message("presence", self.username)
+                # Create message with exactly the required format
+                message = json.dumps({"username": self.username})
                 self.socket.sendto(message.encode(), (BROADCAST_IP, BROADCAST_PORT))
                 time.sleep(BROADCAST_INTERVAL)
             except Exception as e:
