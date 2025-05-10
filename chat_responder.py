@@ -3,6 +3,7 @@ import threading
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 import hashlib
+from colorama import Fore, Style
 from utils import CHAT_PORT, parse_json_message, log_message, get_timestamp, create_json_message
 
 class ChatResponder:
@@ -22,6 +23,7 @@ class ChatResponder:
         self.thread = threading.Thread(target=self._listen_loop)
         self.thread.daemon = True
         self.thread.start()
+        print(f"{Fore.GREEN}Chat responder started on port {CHAT_PORT}{Style.RESET_ALL}")
 
     def _handle_connection(self, conn, addr):
         """Handle an incoming connection."""
@@ -33,6 +35,7 @@ class ChatResponder:
                 return
             
             if "key" in message:
+                print(f"\n{Fore.CYAN}Incoming secure chat request from {addr[0]}{Style.RESET_ALL}")
                 # Handle Diffie-Hellman key exchange
                 p, g = 19, 2
                 private_key = 7  # Fixed private key for simplicity
@@ -57,15 +60,17 @@ class ChatResponder:
                     ct = encrypted_data[16:]
                     cipher = AES.new(key, AES.MODE_CBC, iv)
                     decrypted_message = unpad(cipher.decrypt(ct), AES.block_size).decode()
-                    print(f"\nReceived encrypted message from {addr[0]}: {decrypted_message}")
+                    print(f"\n{Fore.GREEN}Received encrypted message from {addr[0]}:{Style.RESET_ALL}")
+                    print(f"{Fore.CYAN}Message: {decrypted_message}{Style.RESET_ALL}")
                     log_message(self.log_file, get_timestamp(), addr[0], decrypted_message, "RECEIVED")
             
             elif "unencryptedmessage" in message:
-                print(f"\nReceived message from {addr[0]}: {message['unencryptedmessage']}")
+                print(f"\n{Fore.YELLOW}Received message from {addr[0]}:{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}Message: {message['unencryptedmessage']}{Style.RESET_ALL}")
                 log_message(self.log_file, get_timestamp(), addr[0], message["unencryptedmessage"], "RECEIVED")
                 
         except Exception as e:
-            print(f"Error handling connection: {e}")
+            print(f"{Fore.RED}Error handling connection: {e}{Style.RESET_ALL}")
         finally:
             conn.close()
 
@@ -77,7 +82,7 @@ class ChatResponder:
                 threading.Thread(target=self._handle_connection, args=(conn, addr)).start()
             except Exception as e:
                 if self.running:
-                    print(f"Error accepting connection: {e}")
+                    print(f"{Fore.RED}Error accepting connection: {e}{Style.RESET_ALL}")
 
     def stop(self):
         """Stop the chat responder service."""
