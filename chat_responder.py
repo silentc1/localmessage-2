@@ -34,10 +34,21 @@ class ChatResponder:
             if not message:
                 return
             
-            if "encryptedmessage" in message:
+            if "key" in message:
                 print(f"\n{Fore.CYAN}Incoming secure chat request from {addr[0]}{Style.RESET_ALL}")
-                print(f"{Fore.CYAN}Enter your encryption key (will be padded to 24 bytes):{Style.RESET_ALL} ", end="")
-                encryption_key = input()
+                # Handle Diffie-Hellman key exchange
+                p, g = 19, 2
+                private_key = 7  # Fixed private key for simplicity
+                public_key = pow(g, private_key, p)
+                
+                # Send our public key in exact required format
+                conn.send(json.dumps({"key": str(public_key)}).encode())
+                
+                # Calculate shared secret
+                peer_public_key = int(message["key"])
+                shared_secret = pow(peer_public_key, private_key, p)
+                # Convert shared secret to string and pad to 24 bytes for Triple DES
+                encryption_key = str(shared_secret).ljust(24)
                 
                 print(f"{Fore.GREEN}Secure connection established with {addr[0]}{Style.RESET_ALL}")
                 print(f"{Fore.CYAN}Waiting for messages...{Style.RESET_ALL}")
@@ -56,7 +67,7 @@ class ChatResponder:
                             # Decrypt message
                             b64_encoded = message["encryptedmessage"]
                             encoded_msg = base64.b64decode(b64_encoded)
-                            decrypted_message = pyDes.triple_des(encryption_key.ljust(24)).decrypt(encoded_msg, padmode=2).decode()
+                            decrypted_message = pyDes.triple_des(encryption_key).decrypt(encoded_msg, padmode=2).decode()
                             print(f"\n{Fore.GREEN}Received encrypted message from {addr[0]}:{Style.RESET_ALL}")
                             print(f"{Fore.CYAN}Message: {decrypted_message}{Style.RESET_ALL}")
                             log_message(self.log_file, get_timestamp(), addr[0], decrypted_message, "RECEIVED")

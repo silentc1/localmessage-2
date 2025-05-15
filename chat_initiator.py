@@ -47,8 +47,23 @@ class ChatInitiator:
                     s.connect((target_ip, CHAT_PORT))
                     
                     print(f"\n{Fore.GREEN}Initiating secure chat session...{Style.RESET_ALL}")
-                    print(f"{Fore.CYAN}Enter your encryption key (will be padded to 24 bytes):{Style.RESET_ALL} ", end="")
-                    encryption_key = input()
+                    # Implement Diffie-Hellman key exchange
+                    p, g = 19, 2
+                    print(f"{Fore.CYAN}Enter your private key (number):{Style.RESET_ALL} ", end="")
+                    private_key = int(input())
+                    public_key = pow(g, private_key, p)
+                    
+                    # Send first number in exact required format
+                    s.send(json.dumps({"key": str(public_key)}).encode())
+                    
+                    # Receive peer's public key
+                    data = s.recv(1024).decode()
+                    peer_public_key = int(json.loads(data)["key"])
+                    
+                    # Calculate shared secret
+                    shared_secret = pow(peer_public_key, private_key, p)
+                    # Convert shared secret to string and pad to 24 bytes for Triple DES
+                    encryption_key = str(shared_secret).ljust(24)
                     
                     print(f"\n{Fore.GREEN}Secure connection established!{Style.RESET_ALL}")
                     print(f"{Fore.CYAN}Type your message and press Enter to send.{Style.RESET_ALL}")
@@ -62,7 +77,7 @@ class ChatInitiator:
                             break
                             
                         # Encrypt message using Triple DES
-                        encoded_msg = pyDes.triple_des(encryption_key.ljust(24)).encrypt(message, padmode=2)
+                        encoded_msg = pyDes.triple_des(encryption_key).encrypt(message, padmode=2)
                         # Convert to base64 to ensure safe JSON transmission
                         b64_encoded = base64.b64encode(encoded_msg).decode()
                         s.send(json.dumps({"encryptedmessage": b64_encoded}).encode())
