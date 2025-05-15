@@ -1,8 +1,7 @@
 import socket
 import json
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-import hashlib
+import pyDes
+import base64
 import time
 from colorama import Fore, Style
 from utils import CHAT_PORT, create_json_message, parse_json_message, log_message, get_timestamp
@@ -48,22 +47,8 @@ class ChatInitiator:
                     s.connect((target_ip, CHAT_PORT))
                     
                     print(f"\n{Fore.GREEN}Initiating secure chat session...{Style.RESET_ALL}")
-                    # Implement Diffie-Hellman key exchange
-                    p, g = 19, 2
-                    print(f"{Fore.CYAN}Enter your private key (number):{Style.RESET_ALL} ", end="")
-                    private_key = int(input())
-                    public_key = pow(g, private_key, p)
-                    
-                    # Send first number in exact required format
-                    s.send(json.dumps({"key": str(public_key)}).encode())
-                    
-                    # Receive peer's public key
-                    data = s.recv(1024).decode()
-                    peer_public_key = int(json.loads(data)["key"])
-                    
-                    # Calculate shared secret
-                    shared_secret = pow(peer_public_key, private_key, p)
-                    key = hashlib.sha256(str(shared_secret).encode()).digest()
+                    print(f"{Fore.CYAN}Enter your encryption key (will be padded to 24 bytes):{Style.RESET_ALL} ", end="")
+                    encryption_key = input()
                     
                     print(f"\n{Fore.GREEN}Secure connection established!{Style.RESET_ALL}")
                     print(f"{Fore.CYAN}Type your message and press Enter to send.{Style.RESET_ALL}")
@@ -76,11 +61,11 @@ class ChatInitiator:
                         if message.lower() == 'exit':
                             break
                             
-                        # Encrypt and send message in exact required format
-                        cipher = AES.new(key, AES.MODE_CBC)
-                        ct_bytes = cipher.encrypt(pad(message.encode(), AES.block_size))
-                        encrypted_message = cipher.iv + ct_bytes
-                        s.send(json.dumps({"encryptedmessage": encrypted_message.hex()}).encode())
+                        # Encrypt message using Triple DES
+                        encoded_msg = pyDes.triple_des(encryption_key.ljust(24)).encrypt(message, padmode=2)
+                        # Convert to base64 to ensure safe JSON transmission
+                        b64_encoded = base64.b64encode(encoded_msg).decode()
+                        s.send(json.dumps({"encryptedmessage": b64_encoded}).encode())
                         
                         # Log the sent message
                         log_message(self.log_file, get_timestamp(), target_username, message, "SENT")
